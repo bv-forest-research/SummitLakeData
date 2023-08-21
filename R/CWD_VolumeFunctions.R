@@ -1,5 +1,5 @@
 
-#' Date Creek CWD - all years
+#' Summit Lakes cwd data - 2020-2021
 #'
 #' @param dat_loc what is the directory where all data is stored
 #'
@@ -11,23 +11,10 @@
 CWD_vol_calc <- function(dat_loc, incl_sp_decay = FALSE){
 
   #calculate volume for all years
-  dc_cwd_92 <- CWD_1992_Vol_calc(CWD_dat = paste0(dat_loc,"CWD_1992.csv"),
+  #2020 & 2021 considered the same year
+  sl_cwd_21 <- CWD_2021_Vol_calc(CWD_dat = paste0(dat_loc,"EP1162CWDsurvey2020-2021.csv"),
                                  out_carbon_comp = incl_sp_decay)
-  #1993
-  dc_cwd_93 <- CWD_1993_Vol_calc(CWD_dat = paste0(dat_loc,"CWD_1993.csv"),
-                                 out_carbon_comp = incl_sp_decay)
-  #2011
-  dc_cwd_11 <- CWD_2011_Vol_calC(CWD_dat = paste0(dat_loc,"CWD_2011.csv"),
-                                 Horiz_dat = paste0(dat_loc,"CWD_horizontal_dist.csv"),
-                                 out_carbon_comp = incl_sp_decay)
-  #2018 - 2018 transect data only occurred in CC and is in the 2019 data. 2018 csv contains plot data, not suitable for
-  #time series analysis
-  #dc_cwd_18 <- CWD_2018_Vol_calc(CWD_dat = paste0(dat_loc,"CWD_2018.csv"),
-  #                              out_carbon_comp = incl_sp_decay)
-  #2019
-  dc_cwd_19 <- CWD_2019_Vol_calc(CWD_dat = paste0(dat_loc,"CWD_2019.csv"),
-                                 Horiz_dat = paste0(dat_loc,"CWD_horizontal_dist.csv"),
-                                 out_carbon_comp = incl_sp_decay)
+
 
   if(incl_sp_decay == FALSE){
     cd_cwd_allyears <- rbind(dc_cwd_92[,.(Year,Yrs_Post = 0,Unit, VolumeHa)],
