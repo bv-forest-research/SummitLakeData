@@ -30,15 +30,15 @@ CWD_Vol_calc <- function(cwdDat, lineDat){
   # Calculate volume using VanWagner volume equation
   #Convert deg to radians -- if you don't you will get a negative value
   cwdDat[, Tilt.radians:= pi/180*Tilt]
-  # working - but some of the diameters are NA (so need to figure out why then change then below code should be good)
+
   PlotCWDvol <- cwdDat[, .(D2=sum(Diam_cm^2/cos(Tilt.radians))), by=c("Plot", "DecayClass", "Species")]
   PlotCWDvol <- merge(PlotCWDvol, PlotLine)
   PlotCWDvol[, VolHa:= pi^2/(8*HorizontalDist)*D2]
   PlotCWDvol[,c("D2", "HorizontalDist"):=NULL]
-  # remove rows with vol=NA
+  # remove rows with vol=NA - these are transects with no cwd
   PlotCWDvol <- na.omit(PlotCWDvol)
   return(PlotCWDvol)
 }
 
 PlotCWDvol
-# HD = SD/square root of [1+(%slope/100^2)]
+
