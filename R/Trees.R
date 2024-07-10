@@ -215,3 +215,114 @@ clean_trees <- function(raw_data = "./data-raw/SummitLakeData.csv") {
   return(nra)
 
 }
+
+#' Number of planted trees per hectare by PSP
+#'
+#' @param planted_data where is the planted trees data
+#' @return
+#' @export
+#'
+#' @examples
+#'
+#' @details
+#' Hybrid spruce (Sx) was filled planted in 14 experimental units to establish Spruce in un- or
+#' poorly stocked stands. These included PSPs 3, 15, and 24, but looking at the data, it looks like
+#' many plots had planted trees
+#'
+#' plot area = 0.05 ha
+#'
+#'
+planted_trees <- function(planted_data = "./data-raw/Trees/plantedTrees.csv"){
+
+  plantTrees <- fread(planted_data)
+
+  #remove trees that are outside the plot
+  plantTrees <- plantTrees[!grep("Outside|outside", COMMENTS_2021),]
+
+  sph_plant <- plantTrees[, .(SPH = (.N/0.05)), by = .(Plot)]
+  return(sph_plant)
+
+}
+
+natural_regen <- function(nat_reg_dat){
+
+}
+
+
+
+
+
+#' Plot tree summary - by species and size class
+#'
+#' @param dbh_size_class
+#' @param minDBH
+#' @param plot_area
+#' @param raw_data
+#'
+#' @return
+#' @export
+#'
+#' @examples
+plot_sph_size <- function(dbh_size_class = 2,
+                          plot_area = 0.05,
+                          raw_data = "./data-raw/Trees/SummitLakeData.csv") {
+
+  sl_dat <- SummitLakeData::clean_tree_data(raw_data = raw_data)
+  summary(lm(Height ~ Hgt_allom, data = sl_dat[!is.na(Height)]))
+
+  minDBH <- 8
+  maxDBH <- max(sl_dat$DBH, na.rm = TRUE)
+  # Create a vector of DBH size classes, by 2 cm increments
+  diam_classes <- seq(minDBH,(maxDBH + dbh_size_class),
+                      by = dbh_size_class)
+
+  # Replace old tree tag numbers with new, if applicable
+  #raw_data$TreeID <- as.numeric(raw_data$TreeID)
+  #raw_data$TreeID_new <- as.numeric(raw_data$TreeID_new)
+  #raw_data <- raw_data %>%
+  #  dplyr::mutate(TreeID = ifelse(is.na(TreeID_new), TreeID, TreeID_new))
+  #raw_data$TreeID_new <- NULL
+
+  # Create column for and fill with DBH bins
+  for(j in 1:length(diam_classes)){
+    sl_dat[DBH <= diam_classes[j] & DBH > diam_classes[j] - dbh_size_class,
+           DBH_bin := diam_classes[j]]
+  }
+
+  #add all zeros:
+  all_poss <- CJ(unique(sl_dat$unit), unique(sl_dat$Species), unique(sl_dat$Year),
+                 unique(sl_dat$State), unique(sl_dat$DBH_bin))
+  setnames(all_poss,c("V1","V2","V3","V4","V5"),
+           c("unit","Species","Year","State","DBH_bin"))
+
+  #merge with sl_dat
+  merge(sl_dat, all_poss, by = c("unit","Species","Year","State","DBH_bin"), all = T)
+
+
+  sl_dat[, .(SPH = .N/plot_area), by = .(unit,Species,Year,State,DBH_bin)]
+
+  # Calculate stems per hectare
+  dat.summit.m.s[, SPH := count/ PlotArea]
+
+
+
+  # Remove unnecessary columns
+  #dat.summit.m.s$TreeID <- NULL
+  dat.summit.m.s$DBH <- NULL
+  dat.summit.m.s$count <- NULL
+
+
+
+  # Merge labels with data set including SPH
+  dat.summit.SPH <- merge(labels.summit.spD, dat.summit.m.s, all = T)
+  cols <- "SPH"
+  # Now that the counts are done, fill in empty DBH bins with zero
+  dat.summit.SPH[,(cols) := lapply(.SD,nafill, fill = 0), .SDcols = cols]
+  # Eliminate duplicates
+  dat.summit.SPH <- unique(dat.summit.SPH)
+
+
+
+}
+
+
