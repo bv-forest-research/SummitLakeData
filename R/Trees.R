@@ -3,14 +3,12 @@
 #' Title
 #'
 #' @param raw_data
-#' @param live
-#' @param spp
 #' @import data.table
 #' @return
 #' @export
 #'
 #' @examples
-SL_calc_tree_size <- function(raw_data = "./data-raw/SummitLakeData.csv") {
+clean_trees <- function(raw_data = "./data-raw/SummitLakeData.csv") {
 
   dat <- data.table::fread(raw_data)
 
@@ -22,7 +20,7 @@ SL_calc_tree_size <- function(raw_data = "./data-raw/SummitLakeData.csv") {
                     COMMENTS_2019_Oct)]
   sl_trees[,COMMENTS_2019 := paste(COMMENTS_2019_May,COMMENTS_2019_Oct)]
   sl_trees[,`:=`(COMMENTS_2019_May = NULL, COMMENTS_2019_Oct = NULL)]
-  # Clean species codes - assuming "l" is for Larch
+    # Clean species codes - assuming "l" is for Larch
   sl_trees[, Species := ifelse(Species == "l", "Lw",Species)]
 
   # rename plot to unit and add treatments
@@ -67,20 +65,26 @@ SL_calc_tree_size <- function(raw_data = "./data-raw/SummitLakeData.csv") {
   cmm[grep("2009", raw_var), `:=`(Year = 2009)]
   cmm[grep("2019", raw_var), `:=`(Year = 2019)]
 
+  #fix the degrees which had an exit dash
+  cmm[unit == 17 & treeID == "17_308_" & raw_var == "COMMENTS_2009", Comments := "live - 45 lean"]
+  cmm[unit == 18 & treeID == "18_474_" & raw_var == "COMMENTS_2009", Comments := "live - 45 lean"]
   #bring back together
 
   sl <- merge(mm[,.(unit,treeID,Species,DBH,State,Class,Year)],
               cmm[,.(unit,treeID,Species,Comments,Year)],
               by = c("unit","treeID","Species","Year"), all = TRUE)
+
   #which are still standing
   sl[grep("Stand", Comments, ignore.case = TRUE), DeadStatus := "StandingDead"]
 
   #which are missing, dead or down
   sl[grep("Missing", Comments, ignore.case = TRUE), DeadStatus := "DownDead"]
+  #the missing ones are messed up, because they could have fallen or were just missed (still alive)
   sl[grep("tag",Comments,ignore.case = TRUE), DeadStatus := NA]
   sl[grep("live",Comments, ignore.case = TRUE), DeadStatus := NA]
   sl[grep("dead",Comments, ignore.case = TRUE), DeadStatus := "Dead"]
   sl[grep("windthrow",Comments, ignore.case = TRUE), DeadStatus := "DownDead"]
+  sl[grep("windthrown",Comments, ignore.case = TRUE), DeadStatus := "DownDead"]
   sl[grep("live",Comments, ignore.case = TRUE), DeadStatus := NA]
   sl[grep("ground",Comments, ignore.case = TRUE), DeadStatus := "DownDead"]
   sl[grep("Uprooted",Comments, ignore.case = TRUE), DeadStatus := "DownDead"]
@@ -98,223 +102,116 @@ SL_calc_tree_size <- function(raw_data = "./data-raw/SummitLakeData.csv") {
 
   #sl <- sl[!is.na(DBH)]
 
-#is there a DBH for every year after measured the first time until it falls
-for(i in 100:length(ids)){
-  #what is the first year there is a DBH measurement
-  fm <- sl[treeID == ids[i] & !is.na(DBH), min(Year)]
+  #is there a DBH for every year after measured the first time until it falls?
+  #if it dies does it come back to life?
+  nra <- c()
+  #cwda <- c()
+  for(i in 1:length(ids)){
+    #what is the first year there is a DBH measurement
+    fm <- sl[treeID == ids[i] & !is.na(DBH), min(Year)]
 
-  #what's the last year there's a DBH measurement
-  llm <- sl[treeID == ids[i] & !is.na(DBH), max(Year)]
+    #what's the last year there's a DBH measurement
+    llm <- sl[treeID == ids[i] & !is.na(DBH), max(Year)]
 
-  #did it fall and that's why there's no more measurements?
-  if(nrow(sl[treeID == ids[i] & DeadStatus == "DownDead"])>0){
-    nr <- sl[treeID == ids[i] & !is.na(DBH) & DeadStatus != "DownDead"]
-  }
-
-  #was the last measurement in the last possible year?
-  if(llm == max(MeasYrs)){
-    nr <- sl[treeID == ids[i] & !is.na(DBH)]
-  }else{
-    #if not, how many years remaining were surveyed
-      yrs_rem <- as.numeric(grep(paste(MeasYrs, collapse ="|"),
-                                 seq(max(llm,ldm)+1,max(MeasYrs)), value = TRUE))
-
-      #get last DBH and copy the last status
-      misDBH <- data.table(unit = unique(sl[treeID == ids[i]]$unit),
-                           treeID = unique(sl[treeID == ids[i]]$treeID),
-                           Species = unique(sl[treeID == ids[i]]$Species),
-                           Year = yrs_rem,
-                           DBH = sl[treeID == ids[i] & Year == llm& !is.na(DBH)]$DBH,
-                           State = sl[treeID == ids[i] & Year == llm & !is.na(DBH)]$State,
-                           Class = sl[treeID == ids[i] & Year == llm& !is.na(DBH)]$Class,
-                           Comments = sl[treeID == ids[i] & Year == llm& !is.na(DBH)]$Comments,
-                           DeadStatus = sl[treeID == ids[i] & Year == llm& !is.na(DBH)]$DeadStatus)
-
-
-      nr <- rbind(sl[treeID == ids[i] & !is.na(DBH)],misDBH)
-
-      #did the tree fall at some point for sure?
-      if(nrow(nr[DeadStatus == "DownDead"])>0){
-        #take away downed trees
-        nr <- nr[DeadStatus != "DownDead"]
-
+    #check if it was dead and then went live again
+      #for those trees that had a live dbh at some point
+      if(nrow(sl[treeID == ids[i] & !is.na(DBH) & State == "Live"])>0){
+        #what is the year of that live DBH
+        ml <- sl[treeID == ids[i] & !is.na(DBH) & State == "Live", max(Year)]
+        #the max year that it was alive, everything before has to be live too
+        sl[treeID == ids[i] & Year <= ml, DeadStatus := "NotDown"]
       }
-      #It's still possible that the last measurement with no other information
-      # represents a mortality and fall down, but impossible to say
+
+
+    #it it fell, did it stand up again?
+    if(nrow(sl[treeID == ids[i] & DeadStatus == "DownDead"])>0){
+      mf <- sl[treeID == ids[i] & DeadStatus == "DownDead", max(Year)]
+      if(nrow(sl[treeID == ids[i] & DeadStatus == "Dead"])>0){
+        #break()
+        dy <- sl[treeID == ids[i] & DeadStatus == "Dead", max(Year)]
+        if(mf < dy){
+
+          sl[treeID == ids[i] & Year >= mf, DeadStatus := "DownDead"]
+        }
+      }
+
+      #if(nrow(sl[treeID == ids[i] & is.na(DBH) & DeadStatus == "DownDead" &
+       #          State == "Dead" & Year <=2019 & Year >mf])>0){
+        #if it's missing dbh because it fell, give the last one
+
+      #}
+
+    }
+
+    #did it fall and that's why there's no more measurements?
+    #if(nrow(sl[treeID == ids[i] & DeadStatus == "DownDead"])>0){
+     # nr <- sl[treeID == ids[i] & !is.na(DBH) & DeadStatus != "DownDead"]
+      #cwd <- sl[treeID == ids[i] & !is.na(DBH) & DeadStatus == "DownDead"]
+      #break()
+    #}
+
+    #was the last DBH measurement in the last possible year?
+    if(llm == max(MeasYrs)){
+      nr <- sl[treeID == ids[i] & !is.na(DBH)]
+      #cwd <- sl[treeID == ids[i] & !is.na(DBH)]
+    }else{
+      #break()
+      if(nrow(sl[treeID == ids[i] & is.na(DBH)])>0){
+
+        #break()
+        ldm <- max(sl[treeID == ids[i] & is.na(DBH), .(Year)])
+        #if not, how many years remaining were surveyed
+          yrs_rem <- as.numeric(grep(paste(MeasYrs, collapse ="|"),
+                                     seq(max(llm,ldm)+1,max(MeasYrs)), value = TRUE))
+
+          #get last DBH and copy the last status
+          misDBH <- data.table(unit = unique(sl[treeID == ids[i]]$unit),
+                               treeID = unique(sl[treeID == ids[i]]$treeID),
+                               Species = unique(sl[treeID == ids[i]]$Species),
+                               Year = yrs_rem,
+                               DBH = sl[treeID == ids[i] & Year == llm& !is.na(DBH)]$DBH,
+                               State = sl[treeID == ids[i] & Year == llm & !is.na(DBH)]$State,
+                               Class = sl[treeID == ids[i] & Year == llm& !is.na(DBH)]$Class,
+                               Comments = sl[treeID == ids[i] & Year == llm& !is.na(DBH)]$Comments,
+                               DeadStatus = sl[treeID == ids[i] & Year == llm& !is.na(DBH)]$DeadStatus)
+
+
+          nr <- rbind(sl[treeID == ids[i] & !is.na(DBH)],misDBH)
+
+          #did the tree fall at some point for sure?
+          #if(nrow(nr[DeadStatus == "DownDead"])>0){
+           # break()
+            #take away downed trees
+            #nr <- nr[DeadStatus != "DownDead"]
+            #cwd <- nr[DeadStatus == "DownDead"]
+
+          #}
+          #It's still possible that the last measurement with no other information
+          # represents a mortality and fall down, but impossible to say
+      }else{
+        #break()
+      }
+    }
+
+    nra <- rbind(nra, nr)
+    #cwda <- rbind(cwda, cwd)
 
   }
 
-
-}
-
-
-
-
-  sl_trees[, Height := treeCalcs::DiamHgtFN(Species = Species, DBH = DBH, BECzone = "SBS"),
-               by= seq_len(nrow(sl_trees))]
-
-
-    # Calculate carbon per tree
-
-    sl_trees[, MgTree := treeCalcs::TreeCarbonFN(Species = Species,
+ # nra[, Height := treeCalcs::diam_hgt_summitLake(Species = Species,
+  #                                               DBH = DBH,
+   #                                              BECzone = "SBS"),
+    #  by= seq_len(nrow(nra))]
+  #height using same allometry as date creek
+  nra[, Height := treeCalcs::height_dbh(Species = Species,
+                                                 DBH = DBH,
+                                                 BECzone = "SBS"), by= seq_len(nrow(nra))]
+  # Calculate carbon per tree
+  nra[, Kg_treeC := treeCalcs::calc_tree_c(Species = Species,
                                                    DBH = DBH,
                                                    HT = Height,
                                                    Tree_class = Class),
-               by= seq_len(nrow(raw_data_C))]
-
-    #there was code if null species - but I don't see any nas or nulls
-
-
-
-
-    raw_data <- raw_data %>%
-      dplyr::select(Plot, Species, DBH_92_dead, DBH_94_dead, DBH_97_dead, DBH_09_dead, DBH_19_dead)
-
-    # Clean species codes
-    # I am assuming "l" is for Larch
-    raw_data <- raw_data %>%
-      dplyr::mutate(Species = replace(Species, Species == "l", "Lw"))
-
-    # Repeat dead DBH's for following years
-    raw_data <- raw_data %>% dplyr::mutate(DBH_09_dead = ifelse(is.na(DBH_97_dead), DBH_09_dead, DBH_97_dead))
-    raw_data <- raw_data %>% dplyr::mutate(DBH_19_dead = ifelse(is.na(DBH_09_dead), DBH_19_dead, DBH_09_dead))
-
-    raw_data_C <- as.data.table(raw_data)
-
-
-    # rename plot to unit and add treatments
-    names(raw_data_C)[names(raw_data_C) == "Plot"] <- "unit"
-
-    treatment <- data.table(unit = c(3, 6, 9, 10, 16, 17, 20, 4, 8, 11, 12, 15, 18, 5, 7, 13, 14, 19, 24),
-                            treatment = c(rep("ctrl", times = 7), rep("med", times = 6), rep("low", times = 6)))
-
-    raw_data_C <- merge(raw_data_C, treatment, by = "unit")
-
-
-
-    # Create a column for tree class, all deadso given a class of 3
-    raw_data_C[, Class := 3]
-
-
-    # Calculate height per tree
-    HT92_D <- vector()
-    for(i in 1:nrow(raw_data_C)){
-      HT92_D[i] <- DiamHgtFN(Species = raw_data_C[i, Species], DBH = raw_data_C[i, DBH_92_dead])
-    }
-
-    HT94_D <- vector()
-    for(i in 1:nrow(raw_data_C)){
-      HT94_D[i] <- DiamHgtFN(Species = raw_data_C[i, Species], DBH = raw_data_C[i, DBH_94_dead])
-    }
-
-    HT97_D <- vector()
-    for(i in 1:nrow(raw_data_C)){
-      HT97_D[i] <- DiamHgtFN(Species = raw_data_C[i, Species], DBH = raw_data_C[i, DBH_97_dead])
-    }
-
-    HT09_D <- vector()
-    for(i in 1:nrow(raw_data_C)){
-      HT09_D[i] <- DiamHgtFN(Species = raw_data_C[i, Species], DBH = raw_data_C[i, DBH_09_dead])
-    }
-
-    HT19_D <- vector()
-    for(i in 1:nrow(raw_data_C)){
-      HT19_D[i] <- DiamHgtFN(Species = raw_data_C[i, Species], DBH = raw_data_C[i, DBH_19_dead])
-    }
-
-    raw_data_C[, ':='(HT_92_D = HT92_D)]
-    raw_data_C[, ':='(HT_94_D = HT94_D)]
-    raw_data_C[, ':='(HT_97_D = HT97_D)]
-    raw_data_C[, ':='(HT_09_D = HT09_D)]
-    raw_data_C[, ':='(HT_19_D = HT19_D)]
-
-
-
-    # Calculate carbon per tree
-    C92_D <- vector()
-    for(ii in 1:nrow(raw_data_C)){
-      C92_D[ii] <- TreeCarbonFN(Species = raw_data_C[ii, Species], DBH = raw_data_C[ii, DBH_92_dead],
-                                HT = raw_data_C[ii, HT_92_D], Tree_class = raw_data_C[ii, Class])
-    }
-
-    C94_D <- vector()
-    for(ii in 1:nrow(raw_data_C)){
-      C94_D[ii] <- TreeCarbonFN(Species = raw_data_C[ii, Species], DBH = raw_data_C[ii, DBH_94_dead],
-                                HT = raw_data_C[ii, HT_94_D], Tree_class = raw_data_C[ii, Class])
-    }
-
-    C97_D <- vector()
-    for(ii in 1:nrow(raw_data_C)){
-      C97_D[ii] <- TreeCarbonFN(Species = raw_data_C[ii, Species], DBH = raw_data_C[ii, DBH_97_dead],
-                                HT = raw_data_C[ii, HT_97_D], Tree_class = raw_data_C[ii, Class])
-    }
-
-    C09_D <- vector()
-    for(ii in 1:nrow(raw_data_C)){
-      C09_D[ii] <- TreeCarbonFN(Species = raw_data_C[ii, Species], DBH = raw_data_C[ii, DBH_09_dead],
-                                HT = raw_data_C[ii, HT_09_D], Tree_class = raw_data_C[ii, Class])
-    }
-
-    C19_D <- vector()
-    for(ii in 1:nrow(raw_data_C)){
-      C19_D[ii] <- TreeCarbonFN(Species = raw_data_C[ii, Species], DBH = raw_data_C[ii, DBH_19_dead],
-                                HT = raw_data_C[ii, HT_19_D], Tree_class = raw_data_C[ii, Class])
-    }
-
-
-    raw_data_C[, ':='(C_92_D = C92_D/1000)]
-    raw_data_C[, ':='(C_94_D = C94_D/1000)]
-    raw_data_C[, ':='(C_97_D = C97_D/1000)]
-    raw_data_C[, ':='(C_09_D = C09_D/1000)]
-    raw_data_C[, ':='(C_19_D = C19_D/1000)]
-
-
-
-    # Calculate C per plot
-    raw_data_C <- raw_data_C %>% group_by(unit) %>% mutate(C_92_D_unit = sum(C_92_D, na.rm = TRUE)*20)
-    raw_data_C <- raw_data_C %>% group_by(unit) %>% mutate(C_94_D_unit = sum(C_94_D, na.rm = TRUE)*20)
-    raw_data_C <- raw_data_C %>% group_by(unit) %>% mutate(C_97_D_unit = sum(C_97_D, na.rm = TRUE)*20)
-    raw_data_C <- raw_data_C %>% group_by(unit) %>% mutate(C_09_D_unit = sum(C_09_D, na.rm = TRUE)*20)
-    raw_data_C <- raw_data_C %>% group_by(unit) %>% mutate(C_19_D_unit = sum(C_19_D, na.rm = TRUE)*20)
-
-
-
-    # Clean up columns
-    raw_data_C <- raw_data_C %>%
-      dplyr::select(unit, treatment, C_92_D_unit, C_94_D_unit, C_97_D_unit, C_09_D_unit, C_19_D_unit)
-
-
-    raw_data_C <- unique(raw_data_C)
-
-    raw_data_C <- melt(raw_data_C, id.vars = c("unit", "treatment"),
-                       measure.vars = c("C_92_D_unit", "C_94_D_unit", "C_97_D_unit", "C_09_D_unit", "C_19_D_unit"))
-
-
-
-    names(raw_data_C)[names(raw_data_C) == "variable"] <- "timestep"
-    names(raw_data_C)[names(raw_data_C) == "value"] <- "C_unit"
-
-
-
-    raw_data_C <- raw_data_C %>%
-      dplyr::mutate(timestep = as.character(timestep))
-
-    raw_data_C <- raw_data_C %>%
-      dplyr::mutate(timestep = replace(timestep, timestep == "C_92_D_unit", 0),
-                    timestep = replace(timestep, timestep == "C_94_D_unit", 2),
-                    timestep = replace(timestep, timestep == "C_97_D_unit", 5),
-                    timestep = replace(timestep, timestep == "C_09_D_unit", 17),
-                    timestep = replace(timestep, timestep == "C_19_D_unit", 27))
-
-    raw_data_C <- raw_data_C %>%
-      dplyr::mutate(timestep = as.numeric(timestep))
-
-    raw_data_C <- subset(raw_data_C, C_unit != 0.0)
-
-    raw_data_C <- unique(raw_data_C)
-
-    write.csv(summit.lk.dat_C_D, "./Outputs/csv/SummitLake_C_field_D.csv", row.names = FALSE)
-
-
+               by= seq_len(nrow(nra))][, Mg_treeC := Kg_treeC/1000]
+  return(nra)
 
 }
