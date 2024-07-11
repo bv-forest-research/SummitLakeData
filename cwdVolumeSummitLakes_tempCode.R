@@ -40,5 +40,6 @@ CWD_Vol_calc <- function(cwdDat, lineDat){
   return(PlotCWDvol)
 }
 
+CWD_Vol_calc(cwdDat,line)
 PlotCWDvol
 
