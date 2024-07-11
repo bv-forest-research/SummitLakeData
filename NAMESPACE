@@ -3,6 +3,8 @@
 export(CWD_2021_Vol_calc)
 export(CWD_vol_calc)
 export(clean_trees)
+export(planted_trees)
+export(plot_sph_size)
 export(rdSortieOutputs)
 import(data.table)
 importFrom(stringr,str_split)

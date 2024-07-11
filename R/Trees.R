@@ -265,13 +265,14 @@ natural_regen <- function(nat_reg_dat){
 #' @examples
 plot_sph_size <- function(dbh_size_class = 2,
                           plot_area = 0.05,
-                          raw_data = "./data-raw/Trees/SummitLakeData.csv") {
+                          raw_data = "./data-raw/SummitLakeData.csv") {
 
-  sl_dat <- SummitLakeData::clean_tree_data(raw_data = raw_data)
-  summary(lm(Height ~ Hgt_allom, data = sl_dat[!is.na(Height)]))
+  #sl_dat <- SummitLakeData::clean_tree_data(raw_data = raw_data)
+  sl_dat <- SummitLakeData::clean_trees(raw_data = raw_data)
+  #summary(lm(Height ~ Hgt_allom, data = sl_dat[!is.na(Height)]))
 
-  minDBH <- 8
-  maxDBH <- max(sl_dat$DBH, na.rm = TRUE)
+  minDBH <- round(min(sl_dat$DBH, na.rm = TRUE),0)
+  maxDBH <- round(max(sl_dat$DBH, na.rm = TRUE),0)
   # Create a vector of DBH size classes, by 2 cm increments
   diam_classes <- seq(minDBH,(maxDBH + dbh_size_class),
                       by = dbh_size_class)
@@ -295,34 +296,36 @@ plot_sph_size <- function(dbh_size_class = 2,
   setnames(all_poss,c("V1","V2","V3","V4","V5"),
            c("unit","Species","Year","State","DBH_bin"))
 
+  plot_ha <- 1/plot_area
+  sl_dat[, SPH := 1 * plot_ha]
+
   #merge with sl_dat
-  merge(sl_dat, all_poss, by = c("unit","Species","Year","State","DBH_bin"), all = T)
+  sl_poss <- merge(sl_dat, all_poss,
+                   by = c("unit","Species","Year","State","DBH_bin"),
+                   all = T)
+  sl_poss <- sl_poss[, .(unit, Species, Year, State, DBH_bin, SPH)]
+  #sl_poss <- sl_poss[!is.na(DBH_bin)]
+  sl_poss[is.na(SPH), SPH := 0]
+  sl_sum <- sl_poss[, .(SPH = sum(SPH)), by = .(unit,Species,Year,State,DBH_bin)]
 
-
-  sl_dat[, .(SPH = .N/plot_area), by = .(unit,Species,Year,State,DBH_bin)]
+  return(sl_sum)
+  #sl_dat[, .(SPH = .N/plot_area), by = .(unit,Species,Year,State,DBH_bin)]
 
   # Calculate stems per hectare
-  dat.summit.m.s[, SPH := count/ PlotArea]
-
-
+  #dat.summit.m.s[, SPH := count/ PlotArea]
 
   # Remove unnecessary columns
   #dat.summit.m.s$TreeID <- NULL
-  dat.summit.m.s$DBH <- NULL
-  dat.summit.m.s$count <- NULL
-
-
+  #dat.summit.m.s$DBH <- NULL
+  #dat.summit.m.s$count <- NULL
 
   # Merge labels with data set including SPH
-  dat.summit.SPH <- merge(labels.summit.spD, dat.summit.m.s, all = T)
-  cols <- "SPH"
+  #dat.summit.SPH <- merge(labels.summit.spD, dat.summit.m.s, all = T)
+  #cols <- "SPH"
   # Now that the counts are done, fill in empty DBH bins with zero
-  dat.summit.SPH[,(cols) := lapply(.SD,nafill, fill = 0), .SDcols = cols]
+  #dat.summit.SPH[,(cols) := lapply(.SD,nafill, fill = 0), .SDcols = cols]
   # Eliminate duplicates
-  dat.summit.SPH <- unique(dat.summit.SPH)
-
-
-
+  #dat.summit.SPH <- unique(dat.summit.SPH)
 }
 
 
