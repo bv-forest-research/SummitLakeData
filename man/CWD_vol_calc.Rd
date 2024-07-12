@@ -13,5 +13,6 @@ CWD_vol_calc(dat_loc, incl_sp_decay = FALSE)
 Summit Lakes cwd data - 2020-2021
 }
 \details{
-we expect the directory to contain 6 files: CWD_1992.csv, CWD_1993.csv, CWD_2011.csv, CWD_2018.csv and CWD_2019.csv
+Summit Lake currently has only one year of CWD, so only call 2021, but can add more
+as re-measurements occur
 }
