@@ -1,3 +1,33 @@
+#' Summit Lakes cwd data - 2020-2021
+#'
+#' @param dat_loc what is the directory where all data is stored
+#' @param incl_sp_decay
+#'
+#' @details Summit Lake currently has only one year of CWD, so only call 2021, but can add more
+#' as re-measurements occur
+#'
+#' @return
+#' @export
+#'
+#' @examples
+CWD_vol_calc <- function(dat_loc, incl_sp_decay = FALSE){
+
+  sl_cwd_21 <- suppressWarnings(CWD_2021_vol_calc(CWD_dat = paste0(dat_loc,
+                                                                   "EP1162CWDsurvey2020-2021.csv"),
+                                                  line_dat = paste0(dat_loc,
+                                                                    "EP1162CWDsurveyTransectLines2020-2021.csv"),
+                                                  sp_decay = incl_sp_decay))
+
+  cd_cwd_allyears <- rbind(sl_cwd_21)
+
+  return(cd_cwd_allyears)
+
+}
+
+
+#
+
+
 library(data.table)
 
 # load data

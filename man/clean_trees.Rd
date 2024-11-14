@@ -2,10 +2,13 @@
 % Please edit documentation in R/Trees.R
 \name{clean_trees}
 \alias{clean_trees}
-\title{Title}
+\title{Clean all years of Summit Lake tree data}
 \usage{
 clean_trees(raw_data = "./data-raw/SummitLakeData.csv")
 }
 \description{
-Title
+Clean up and simplify the Summit Lake data to support numerous other uses - diameter, heights
+for each tree in each year in long format
+
+Note: this function also
 }
