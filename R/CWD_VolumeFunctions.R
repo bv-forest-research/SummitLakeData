@@ -16,8 +16,8 @@ CWD_2021_Vol_calc <- function(CWD_dat = "./data-raw/EP1162CWDsurvey2020-2021.csv
   CWD.2021 <- data.table::fread(CWD_dat, na.strings = "-")
   CWD.2021[, `Accum/Odd-length(cm)`:=NULL]
 
-  CWD.2021[, unit := as.character(as.numeric(stringr::str_split_fixed(Plot, "-",
-                                                         n=2)[,2]))]
+  CWD.2021[, unit := as.numeric(stringr::str_split_fixed(Plot, "-",
+                                                         n=2)[,2])]
   CWD.2021 <- merge(CWD.2021, SummitLakeData::Treatments, by = c("unit"))
   # Square diameter
   CWD.2021[, D2_cosA:= `diam(cm)`^2]
@@ -34,8 +34,8 @@ CWD_2021_Vol_calc <- function(CWD_dat = "./data-raw/EP1162CWDsurvey2020-2021.csv
 
   # Import horizontal transect csv file then convert individual lines to plot summary
   transect <- data.table::fread(Horiz_dat)
-  transect[, unit := as.character(as.numeric(stringr::str_split_fixed(Plot, "-",
-                                                         n=2)[,2]))]
+  transect[, unit := as.numeric(stringr::str_split_fixed(Plot, "-",
+                                                         n=2)[,2])]
   transect <- merge(transect, SummitLakeData::Treatments, by = c("unit"))
   transectPlot <- transect[, .(HorDist = sum(HorizontalDist)), by =c("unit","treatment")]
 
