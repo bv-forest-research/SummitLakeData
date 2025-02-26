@@ -1,11 +1,19 @@
 
 
-#' Title
+#' Clean all years of Summit Lake tree data
 #'
 #' @param raw_data
 #' @import data.table
 #' @return
 #' @export
+#'
+#' @description
+#' Clean up and simplify the Summit Lake data to support numerous other uses - diameter, heights
+#' for each tree in each year in long format
+#'
+#' Note: this function also
+#'
+#'
 #'
 #' @examples
 clean_trees <- function(raw_data = "./data-raw/SummitLakeData.csv") {
@@ -16,6 +24,7 @@ clean_trees <- function(raw_data = "./data-raw/SummitLakeData.csv") {
 
   sl_trees <- dat[,.(Plot,treeID,Species, DBH_c_92_live, DBH_c_94_live, DBH_c_97_live, DBH_09_live, DBH_19_live,
                     DBH_92_dead, DBH_94_dead, DBH_97_dead, DBH_09_dead, DBH_19_dead,
+                    HGT_92, HGT_94, HGT_97, HGT_19,
                     COMMENTS_1992,COMMENTS_1994,	COMMENTS_1997,	COMMENTS_2009,COMMENTS_2019_May,
                     COMMENTS_2019_Oct)]
   sl_trees[,COMMENTS_2019 := paste(COMMENTS_2019_May,COMMENTS_2019_Oct)]
@@ -32,7 +41,7 @@ clean_trees <- function(raw_data = "./data-raw/SummitLakeData.csv") {
   m <- sl_trees[,..datCols]
 
   datCols <- grep("DBH", colnames(sl_trees),value = TRUE)
-  m[,(datCols):= lapply(.SD, as.numeric), .SDcols = datCols]
+  suppressWarnings(m[,(datCols):= lapply(.SD, as.numeric), .SDcols = datCols])
 
   mm <- melt(m, measure.vars = datCols,
                        variable.name = "raw_var",
@@ -48,7 +57,7 @@ clean_trees <- function(raw_data = "./data-raw/SummitLakeData.csv") {
   mm[grep("09", raw_var), `:=`(Year = 2009)]
   mm[grep("19", raw_var), `:=`(Year = 2019)]
 
-  #melt from wide to long - COMMENTS
+  #melt from wide to long - COMMENTS ---------------------------
   datCols <- c("unit","treeID", "Species",grep("COMMENTS", colnames(sl_trees),value = TRUE))
   cm <- sl_trees[,..datCols]
 
@@ -68,11 +77,36 @@ clean_trees <- function(raw_data = "./data-raw/SummitLakeData.csv") {
   #fix the degrees which had an exit dash
   cmm[unit == 17 & treeID == "17_308_" & raw_var == "COMMENTS_2009", Comments := "live - 45 lean"]
   cmm[unit == 18 & treeID == "18_474_" & raw_var == "COMMENTS_2009", Comments := "live - 45 lean"]
+
+
+
+  #melt from wide to long height -----------------------------
+  #melt from wide to long - DBH
+  datCols <- c("unit","treeID", "Species",grep("HGT", colnames(sl_trees),value = TRUE))
+  mh <- sl_trees[,..datCols]
+
+  datCols <- grep("HGT", colnames(sl_trees),value = TRUE)
+  suppressWarnings(mh[,(datCols):= lapply(.SD, as.numeric), .SDcols = datCols])
+
+  mmh <- melt(mh, measure.vars = datCols,
+             variable.name = "raw_var",
+             value.name = "HGT")
+
+  mmh[grep("92", raw_var), `:=`(Year = 1992)]
+  mmh[grep("94", raw_var), `:=`(Year = 1994)]
+  mmh[grep("97", raw_var), `:=`(Year = 1997)]
+  mmh[grep("09", raw_var), `:=`(Year = 2009)]
+  mmh[grep("19", raw_var), `:=`(Year = 2019)]
+
   #bring back together
 
-  sl <- merge(mm[,.(unit,treeID,Species,DBH,State,Class,Year)],
+  sl1 <- merge(mm[,.(unit,treeID,Species,DBH,State,Class,Year)],
               cmm[,.(unit,treeID,Species,Comments,Year)],
               by = c("unit","treeID","Species","Year"), all = TRUE)
+
+  sl <- merge(sl1,
+              mmh[,.(unit,treeID,Species,HGT,Year)],
+               by = c("unit","treeID","Species","Year"), all = TRUE)
 
   #which are still standing
   sl[grep("Stand", Comments, ignore.case = TRUE), DeadStatus := "StandingDead"]
@@ -170,6 +204,7 @@ clean_trees <- function(raw_data = "./data-raw/SummitLakeData.csv") {
                                Species = unique(sl[treeID == ids[i]]$Species),
                                Year = yrs_rem,
                                DBH = sl[treeID == ids[i] & Year == llm& !is.na(DBH)]$DBH,
+                               HGT = sl[treeID == ids[i] & Year == llm& !is.na(DBH)]$HGT,
                                State = sl[treeID == ids[i] & Year == llm & !is.na(DBH)]$State,
                                Class = sl[treeID == ids[i] & Year == llm& !is.na(DBH)]$Class,
                                Comments = sl[treeID == ids[i] & Year == llm& !is.na(DBH)]$Comments,
@@ -206,126 +241,8 @@ clean_trees <- function(raw_data = "./data-raw/SummitLakeData.csv") {
   nra[, Height := treeCalcs::height_dbh(Species = Species,
                                                  DBH = DBH,
                                                  BECzone = "SBS"), by= seq_len(nrow(nra))]
-  # Calculate carbon per tree
-  nra[, Kg_treeC := treeCalcs::calc_tree_c(Species = Species,
-                                                   DBH = DBH,
-                                                   HT = Height,
-                                                   Tree_class = Class),
-               by= seq_len(nrow(nra))][, Mg_treeC := Kg_treeC/1000]
+  setnames(nra, "HGT", "meas_hgt")
+
   return(nra)
 
 }
-
-#' Number of planted trees per hectare by PSP
-#'
-#' @param planted_data where is the planted trees data
-#' @return
-#' @export
-#'
-#' @examples
-#'
-#' @details
-#' Hybrid spruce (Sx) was filled planted in 14 experimental units to establish Spruce in un- or
-#' poorly stocked stands. These included PSPs 3, 15, and 24, but looking at the data, it looks like
-#' many plots had planted trees
-#'
-#' plot area = 0.05 ha
-#'
-#'
-planted_trees <- function(planted_data = "./data-raw/Trees/plantedTrees.csv"){
-
-  plantTrees <- fread(planted_data)
-
-  #remove trees that are outside the plot
-  plantTrees <- plantTrees[!grep("Outside|outside", COMMENTS_2021),]
-
-  sph_plant <- plantTrees[, .(SPH = (.N/0.05)), by = .(Plot)]
-  return(sph_plant)
-
-}
-
-natural_regen <- function(nat_reg_dat){
-
-}
-
-
-
-
-
-#' Plot tree summary - by species and size class
-#'
-#' @param dbh_size_class
-#' @param minDBH
-#' @param plot_area
-#' @param raw_data
-#'
-#' @return
-#' @export
-#'
-#' @examples
-plot_sph_size <- function(dbh_size_class = 2,
-                          plot_area = 0.05,
-                          raw_data = "./data-raw/SummitLakeData.csv") {
-
-  #sl_dat <- SummitLakeData::clean_tree_data(raw_data = raw_data)
-  sl_dat <- SummitLakeData::clean_trees(raw_data = raw_data)
-  #summary(lm(Height ~ Hgt_allom, data = sl_dat[!is.na(Height)]))
-
-  minDBH <- round(min(sl_dat$DBH, na.rm = TRUE),0)
-  maxDBH <- round(max(sl_dat$DBH, na.rm = TRUE),0)
-  # Create a vector of DBH size classes, by 2 cm increments
-  diam_classes <- seq(minDBH,(maxDBH + dbh_size_class),
-                      by = dbh_size_class)
-
-  # Replace old tree tag numbers with new, if applicable
-  #raw_data$TreeID <- as.numeric(raw_data$TreeID)
-  #raw_data$TreeID_new <- as.numeric(raw_data$TreeID_new)
-  #raw_data <- raw_data %>%
-  #  dplyr::mutate(TreeID = ifelse(is.na(TreeID_new), TreeID, TreeID_new))
-  #raw_data$TreeID_new <- NULL
-
-  # Create column for and fill with DBH bins
-  for(j in 1:length(diam_classes)){
-    sl_dat[DBH <= diam_classes[j] & DBH > diam_classes[j] - dbh_size_class,
-           DBH_bin := diam_classes[j]]
-  }
-
-  #add all zeros:
-  all_poss <- CJ(unique(sl_dat$unit), unique(sl_dat$Species), unique(sl_dat$Year),
-                 unique(sl_dat$State), unique(sl_dat$DBH_bin))
-  setnames(all_poss,c("V1","V2","V3","V4","V5"),
-           c("unit","Species","Year","State","DBH_bin"))
-
-  plot_ha <- 1/plot_area
-  sl_dat[, SPH := 1 * plot_ha]
-
-  #merge with sl_dat
-  sl_poss <- merge(sl_dat, all_poss,
-                   by = c("unit","Species","Year","State","DBH_bin"),
-                   all = T)
-  sl_poss <- sl_poss[, .(unit, Species, Year, State, DBH_bin, SPH)]
-  #sl_poss <- sl_poss[!is.na(DBH_bin)]
-  sl_poss[is.na(SPH), SPH := 0]
-  sl_sum <- sl_poss[, .(SPH = sum(SPH)), by = .(unit,Species,Year,State,DBH_bin)]
-
-  return(sl_sum)
-  #sl_dat[, .(SPH = .N/plot_area), by = .(unit,Species,Year,State,DBH_bin)]
-
-  # Calculate stems per hectare
-  #dat.summit.m.s[, SPH := count/ PlotArea]
-
-  # Remove unnecessary columns
-  #dat.summit.m.s$TreeID <- NULL
-  #dat.summit.m.s$DBH <- NULL
-  #dat.summit.m.s$count <- NULL
-
-  # Merge labels with data set including SPH
-  #dat.summit.SPH <- merge(labels.summit.spD, dat.summit.m.s, all = T)
-  #cols <- "SPH"
-  # Now that the counts are done, fill in empty DBH bins with zero
-  #dat.summit.SPH[,(cols) := lapply(.SD,nafill, fill = 0), .SDcols = cols]
-  # Eliminate duplicates
-  #dat.summit.SPH <- unique(dat.summit.SPH)
-}
-
-
